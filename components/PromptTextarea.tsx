@@ -40,7 +40,7 @@ export default function PromptTextarea({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        placeholder="Enter your raw prompt here... (e.g., 'create a REST API for user management')"
+        placeholder="How do I know if a Python package is safe to use?"
         rows={6}
         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed resize-none"
       />
