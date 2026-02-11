@@ -42,6 +42,16 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Copy scripts directory and package.json for user management CLI
+COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
+
+# Copy node_modules for CLI dependencies (tsx, bcryptjs)
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+
+# Create users.json with proper permissions if it doesn't exist
+RUN touch users.json && chown nextjs:nodejs users.json && chmod 600 users.json
+
 USER nextjs
 
 # Expose port
