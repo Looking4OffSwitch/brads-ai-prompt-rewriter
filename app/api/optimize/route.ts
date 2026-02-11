@@ -5,6 +5,7 @@ import { isRateLimited } from '@/lib/rate-limit';
 import { MAX_PROMPT_LENGTH, ERROR_MESSAGES } from '@/lib/constants';
 import { generateRequestId, logInfo, logWarn, logError, logTiming } from '@/lib/logger';
 import { sanitizeInput, isValidUtf8, getClientIp } from '@/lib/validation';
+import { getAuthenticatedUser } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 
@@ -15,6 +16,11 @@ export const runtime = 'nodejs';
 export async function POST(req: NextRequest) {
   const requestId = generateRequestId();
   const startTime = Date.now();
+
+  // Get authenticated user from session
+  const session = getAuthenticatedUser(req);
+  const username = session?.username || 'unknown';
+  const displayName = session?.displayName || username;
 
   try {
     // Parse request body
@@ -64,20 +70,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Build the user message that will be sent to the API
+    const userMessage = buildUserPrompt(role, prompt);
+
     // Log the full prompt for auditing and debugging
     logInfo('Received optimization request', {
       requestId,
+      username,
+      displayName,
       role: role,
       prompt: prompt,
       roleLength: role.length,
       promptLength: prompt.length,
+      userMessage: userMessage, // Log the exact message sent to API
     });
 
     // Rate limiting with proper IP detection
     const ip = getClientIp(req.headers);
 
     if (isRateLimited(ip)) {
-      logWarn('Rate limit exceeded', { requestId, ip });
+      logWarn('Rate limit exceeded', { requestId, username, displayName, ip });
       return NextResponse.json(
         { error: ERROR_MESSAGES.RATE_LIMITED },
         { status: 429 }
@@ -86,7 +98,7 @@ export async function POST(req: NextRequest) {
 
     // Check for API key
     if (!process.env.ANTHROPIC_API_KEY) {
-      logError('ANTHROPIC_API_KEY is not configured', undefined, { requestId });
+      logError('ANTHROPIC_API_KEY is not configured', undefined, { requestId, username });
       return NextResponse.json(
         { error: ERROR_MESSAGES.SERVICE_CONFIG_ERROR },
         { status: 500 }
@@ -96,6 +108,8 @@ export async function POST(req: NextRequest) {
     // Log start of streaming
     logInfo('Starting Anthropic API stream', {
       requestId,
+      username,
+      displayName,
       ip,
       model: MODEL,
     });
@@ -117,7 +131,7 @@ export async function POST(req: NextRequest) {
             messages: [
               {
                 role: 'user',
-                content: buildUserPrompt(role, prompt),
+                content: userMessage,
               },
             ],
             stream: true,
@@ -140,17 +154,23 @@ export async function POST(req: NextRequest) {
             if (event.type === 'message_stop') {
               const streamDuration = Date.now() - streamStartTime;
 
-              // Log the complete optimized output
+              // Log the complete optimized output and original input for comparison
               logInfo('Optimization completed', {
                 requestId,
+                username,
+                displayName,
                 ip,
-                optimizedOutput: optimizedOutput,
+                userPrompt: prompt, // Original user prompt
+                userRole: role, // Original user role
+                llmResponse: optimizedOutput, // Complete LLM response
                 approximateTokens: tokenCount,
                 streamDuration,
               });
 
               logTiming('Anthropic API stream', streamDuration, {
                 requestId,
+                username,
+                displayName,
                 ip,
                 approximateTokens: tokenCount,
               });
@@ -164,6 +184,8 @@ export async function POST(req: NextRequest) {
           const streamDuration = Date.now() - streamStartTime;
           logWarn('Stream ended without message_stop event', {
             requestId,
+            username,
+            displayName,
             ip,
             optimizedOutput: optimizedOutput, // Log output even in fallback case
             streamDuration,
@@ -171,7 +193,7 @@ export async function POST(req: NextRequest) {
           controller.enqueue(encoder.encode('data: [DONE]\n\n'));
           controller.close();
         } catch (error: any) {
-          logError('Anthropic API error', error, { requestId, ip });
+          logError('Anthropic API error', error, { requestId, username, displayName, ip });
 
           // Send error through the stream
           const errorMessage = error.message || 'An unexpected error occurred';
@@ -191,13 +213,13 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error: any) {
-    logError('Request handling error', error, { requestId });
+    logError('Request handling error', error, { requestId, username });
     return NextResponse.json(
       { error: ERROR_MESSAGES.GENERIC_ERROR },
       { status: 500 }
     );
   } finally {
     const totalDuration = Date.now() - startTime;
-    logTiming('Total request', totalDuration, { requestId });
+    logTiming('Total request', totalDuration, { requestId, username });
   }
 }

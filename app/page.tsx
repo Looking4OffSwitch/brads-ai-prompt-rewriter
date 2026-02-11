@@ -16,6 +16,7 @@ export default function Home() {
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [showCopyToast, setShowCopyToast] = useState<boolean>(false);
+  const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
 
   const handleOptimize = async () => {
     // Clear previous state
@@ -133,6 +134,28 @@ export default function Home() {
     }
   };
 
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      const response = await fetch('/api/auth/logout', {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        // Redirect to login page
+        window.location.href = '/login';
+      } else {
+        console.error('Logout failed');
+        setError('Failed to logout. Please try again.');
+        setIsLoggingOut(false);
+      }
+    } catch (err) {
+      console.error('Logout error:', err);
+      setError('Network error during logout.');
+      setIsLoggingOut(false);
+    }
+  };
+
   const canOptimize =
     role.trim().length > 0 &&
     prompt.trim().length > 0 &&
@@ -143,7 +166,59 @@ export default function Home() {
     <main className="min-h-screen bg-gradient-to-br from-blue-50 to-gray-100 py-8 px-4">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-8 relative">
+          {/* Logout button in top-right corner */}
+          <div className="absolute top-0 right-0">
+            <button
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center gap-2 text-sm"
+              title="Logout"
+            >
+              {isLoggingOut ? (
+                <>
+                  <svg
+                    className="animate-spin h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  <span>Logging out...</span>
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                    />
+                  </svg>
+                  <span>Logout</span>
+                </>
+              )}
+            </button>
+          </div>
+
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
             🧠 AI Prompt Optimizer
           </h1>
